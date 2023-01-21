@@ -22,20 +22,16 @@ enum Operation {
 
 /// A differentiable scalar value.
 /// Wrapped into Parameter.
-struct Value<'a> {
+struct Value {
     hash: Uuid,
     data: f64,
     grad: f64,
-    backward: Option<Box<dyn FnMut() -> () + 'a>>,
-    previous: HashSet<Parameter<'a>>,
+    backward: Option<Box<dyn FnMut() -> ()>>,
+    previous: HashSet<Parameter>,
     op: Operation,
 }
 
-fn build_topo<'a>(
-    param: Parameter<'a>,
-    topo: &mut Vec<Parameter<'a>>,
-    visited: &mut HashSet<Uuid>,
-) {
+fn build_topo(param: Parameter, topo: &mut Vec<Parameter>, visited: &mut HashSet<Uuid>) {
     let hash = param.0.borrow().hash;
     if !visited.contains(&hash) {
         visited.insert(hash);
@@ -51,10 +47,10 @@ fn build_topo<'a>(
 
 /// Parameter is Value with reference counting and mutable borrows.
 /// These are needed because an autograd system is modeled as a graph.
-pub struct Parameter<'a>(Rc<RefCell<Value<'a>>>);
+pub struct Parameter(Rc<RefCell<Value>>);
 
-impl<'a> Value<'a> {
-    pub fn from_scalar(data: f64) -> Parameter<'a> {
+impl Value {
+    pub fn from_scalar(data: f64) -> Parameter {
         Parameter(Rc::new(RefCell::new(Value {
             hash: Uuid::new_v4(),
             data,
@@ -64,7 +60,7 @@ impl<'a> Value<'a> {
             op: Operation::Init,
         })))
     }
-    fn new(data: f64, previous: HashSet<Parameter<'a>>, op: Operation) -> Value<'a> {
+    fn new(data: f64, previous: HashSet<Parameter>, op: Operation) -> Value {
         Value {
             hash: Uuid::new_v4(),
             data,
@@ -76,9 +72,9 @@ impl<'a> Value<'a> {
     }
 }
 
-impl<'a> Parameter<'a> {
+impl Parameter {
     /// Passes Parameter through a ReLU.
-    pub fn relu(self) -> Parameter<'a> {
+    pub fn relu(self) -> Parameter {
         let data = self.0.borrow().data;
         let out = Value::new(
             if data < 0.0 { 0.0 } else { data },
@@ -103,7 +99,7 @@ impl<'a> Parameter<'a> {
         self.0.borrow_mut().grad = 0.0;
     }
     /// Increase reference count of this Parameter.
-    pub fn clone(&self) -> Parameter<'a> {
+    pub fn clone(&self) -> Parameter {
         Parameter(Rc::clone(&self.0))
     }
     /// Performs a backward pass on the Parameter if it's defined.
@@ -117,7 +113,7 @@ impl<'a> Parameter<'a> {
     }
     /// Initiates a recursive backward pass from this Parameter to graph root.
     pub fn backward(&self) -> () {
-        let mut topo_nodes: Vec<Parameter<'a>> = vec![];
+        let mut topo_nodes: Vec<Parameter> = vec![];
         let mut visited_nodes: HashSet<Uuid> = HashSet::new();
         build_topo(self.clone(), &mut topo_nodes, &mut visited_nodes);
         println!("Topo");
@@ -131,7 +127,7 @@ impl<'a> Parameter<'a> {
         println!("\n");
     }
     /// Raises Parameter to power of `power`.
-    pub fn pow(self, power: f64) -> Parameter<'a> {
+    pub fn pow(self, power: f64) -> Parameter {
         let data = self.0.borrow().data;
         let out = Value::new(
             data.powf(power),
@@ -149,7 +145,7 @@ impl<'a> Parameter<'a> {
     }
 }
 
-impl Hash for Parameter<'_> {
+impl Hash for Parameter {
     fn hash<H: Hasher>(&self, state: &mut H) {
         let borrow = self.0.borrow();
         let borrow = &*borrow;
@@ -157,15 +153,15 @@ impl Hash for Parameter<'_> {
     }
 }
 
-impl PartialEq for Value<'_> {
+impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         self.data == other.data
     }
 }
 
-impl Eq for Value<'_> {}
+impl Eq for Value {}
 
-impl PartialEq for Parameter<'_> {
+impl PartialEq for Parameter {
     fn eq(&self, other: &Self) -> bool {
         let borrow = self.0.borrow();
         let borrow = &*borrow;
@@ -176,9 +172,9 @@ impl PartialEq for Parameter<'_> {
     }
 }
 
-impl std::ops::Add for Parameter<'_> {
+impl std::ops::Add for Parameter {
     type Output = Self;
-    fn add<'a>(self, other: Self) -> Self {
+    fn add(self, other: Self) -> Self {
         let data = self.0.borrow().data + other.0.borrow().data;
         let out = Value::new(
             data,
@@ -207,9 +203,9 @@ impl std::ops::Add for Parameter<'_> {
     }
 }
 
-impl std::ops::Mul for Parameter<'_> {
+impl std::ops::Mul for Parameter {
     type Output = Self;
-    fn mul<'a>(self, other: Self) -> Self {
+    fn mul(self, other: Self) -> Self {
         let data = self.0.borrow().data * other.0.borrow().data;
         let out = Value::new(
             data,
@@ -240,8 +236,8 @@ impl std::ops::Mul for Parameter<'_> {
     }
 }
 
-impl std::ops::AddAssign for Parameter<'_> {
-    fn add_assign<'a>(&mut self, _other: Self) -> () {
+impl std::ops::AddAssign for Parameter {
+    fn add_assign(&mut self, _other: Self) -> () {
         // TODO: implement?
         unimplemented!("below does not work");
         // *self = self.clone() + other;
@@ -249,36 +245,36 @@ impl std::ops::AddAssign for Parameter<'_> {
     }
 }
 
-impl std::ops::Neg for Parameter<'_> {
+impl std::ops::Neg for Parameter {
     type Output = Self;
-    fn neg<'a>(self) -> Self {
+    fn neg(self) -> Self {
         let out = self * Value::from_scalar(-1.0);
         out.0.borrow_mut().op = Operation::Neg;
         out
     }
 }
 
-impl std::ops::Sub for Parameter<'_> {
+impl std::ops::Sub for Parameter {
     type Output = Self;
-    fn sub<'a>(self, other: Self) -> Self {
+    fn sub(self, other: Self) -> Self {
         let out = self + (-other);
         out.0.borrow_mut().op = Operation::Sub;
         out
     }
 }
 
-impl std::ops::Div for Parameter<'_> {
+impl std::ops::Div for Parameter {
     type Output = Self;
-    fn div<'a>(self, other: Self) -> Self {
+    fn div(self, other: Self) -> Self {
         let out = self * other.pow(-1.0);
         out.0.borrow_mut().op = Operation::Div;
         out
     }
 }
 
-impl Eq for Parameter<'_> {}
+impl Eq for Parameter {}
 
-impl fmt::Display for Value<'_> {
+impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,

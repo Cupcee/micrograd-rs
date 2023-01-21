@@ -1,10 +1,10 @@
 use crate::autograd::Parameter;
 
-pub struct Neuron<'a> {
-    parameters: Vec<Parameter<'a>>,
+pub struct Neuron {
+    parameters: Vec<Parameter>,
 }
 
-impl<'a> Neuron<'a> {
+impl Neuron {
     pub fn zero_grad(&mut self) -> () {
         for param in self.parameters.iter_mut() {
             param.zero_grad();
