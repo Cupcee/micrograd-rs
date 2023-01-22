@@ -4,7 +4,7 @@ use micrograd_rs::{
     nn::{loss, MLP},
 };
 use plotters::prelude::*;
-use std::iter::zip;
+use std::{iter::zip, time::Instant};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let root = BitMapBackend::new("plots/test.png", (640, 480)).into_drawing_area();
@@ -52,61 +52,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for epoch in 0..100 {
         // forward pass
         shuffle(&mut [&mut x1, &mut x2, &mut y]);
-        let preds: Vec<Parameter> = zip(x1.clone(), x2.clone())
+        let start = Instant::now();
+        let preds: Vec<Parameter> = zip(&x1, &x2)
             .flat_map(|(x1, x2)| {
-                let input = vec![Parameter::from_scalar(x1), Parameter::from_scalar(x2)];
+                let input = vec![Parameter::from_scalar(*x1), Parameter::from_scalar(*x2)];
                 model.forward(input)
             })
             .collect();
 
         // compute loss
-        let grad_before_loss = model
-            .parameters()
-            .into_iter()
-            .map(|a| a.grad())
-            .reduce(|a, b| a + b)
-            .unwrap();
-        dbg!(grad_before_loss);
         let (total_loss, acc) = loss(&model, preds.clone(), &y);
-        let grad_after_loss = model
-            .parameters()
-            .into_iter()
-            .map(|a| a.grad())
-            .reduce(|a, b| a + b)
-            .unwrap();
-        dbg!(grad_after_loss);
 
         // backward pass
         model.zero_grad();
-        let grad_after_zero_grad = model
-            .parameters()
-            .into_iter()
-            .map(|a| a.grad())
-            .reduce(|a, b| a + b)
-            .unwrap();
-        dbg!(grad_after_zero_grad);
         total_loss.backward();
-        let grad_after_backward_pass = model
-            .parameters()
-            .into_iter()
-            .map(|a| a.grad())
-            .reduce(|a, b| a + b)
-            .unwrap();
-        dbg!(grad_after_backward_pass);
 
         // update learning rate
         let lr = 1.0 - 0.9 * (epoch as f32) / 100.0;
-        for p in model.parameters() {
-            let mut pref = p.0.borrow_mut();
-            let increment = lr * pref.grad;
-            pref.data -= increment;
-        }
-        // model.lr_step(lr);
+        model.lr_step(lr);
+        let duration = start.elapsed();
 
         if epoch % 1 == 0 {
             println!(
-                "Step {} loss: {}, accuracy: {}%",
+                "Epoch: {}, time: {}, loss: {}, accuracy: {}%",
                 epoch,
+                duration.as_millis(),
                 total_loss.data(),
                 acc * 100.0
             );

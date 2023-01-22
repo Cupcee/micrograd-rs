@@ -1,10 +1,13 @@
 use std::{f32::consts::PI, iter::zip};
 
 use num_traits::Float;
+use rand::thread_rng;
 use rand::Rng;
-use rand::{seq::SliceRandom, thread_rng};
 use rand_distr::{Distribution, Normal};
 
+/// Shuffles the given slices in place, such that the slices retain the relative
+/// order between each other. Useful for shuffling `x` and `y` for ML tasks.
+/// Credit: https://stackoverflow.com/questions/60476393/is-there-a-way-to-shuffle-two-or-more-lists-in-the-same-order
 pub fn shuffle<T: Copy>(slices: &mut [&mut [T]]) {
     if slices.len() > 0 {
         let mut rng = thread_rng();
@@ -24,6 +27,8 @@ pub fn shuffle<T: Copy>(slices: &mut [&mut [T]]) {
     }
 }
 
+/// Basically Numpy linspace. Returns `n` evenly spaced elements between
+/// `l` and `h`.
 pub fn linspace<T: Float + std::convert::From<u16>>(l: T, h: T, n: usize) -> Vec<T> {
     let size: T = (n as u16 - 1)
         .try_into()
@@ -38,7 +43,8 @@ pub fn linspace<T: Float + std::convert::From<u16>>(l: T, h: T, n: usize) -> Vec
         .collect()
 }
 
-// Credit: https://github.com/scikit-learn/scikit-learn/blob/98cf537f5/sklearn/datasets/_samples_generator.py#L724
+/// Generates a 2D dataset of points resembling two crescent moons.
+/// Credit: https://github.com/scikit-learn/scikit-learn/blob/98cf537f5/sklearn/datasets/_samples_generator.py#L724
 pub fn make_moons(
     n_samples: usize,
     should_shuffle: bool,

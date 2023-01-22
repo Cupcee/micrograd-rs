@@ -24,9 +24,9 @@ enum Operation {
 /// Wrapped into Parameter.
 pub struct Value {
     hash: Uuid,
-    pub data: f32,
-    pub grad: f32,
-    backward: Option<Box<dyn FnMut() -> ()>>,
+    data: f32,
+    grad: f32,
+    backward: Option<Box<dyn FnOnce() -> ()>>,
     previous: HashSet<Parameter>,
     op: Operation,
 }
@@ -141,9 +141,6 @@ impl Parameter {
     }
     pub fn data(&self) -> f32 {
         self.0.borrow().data
-    }
-    pub fn grad(&self) -> f32 {
-        self.0.borrow().grad
     }
     pub fn lr_step(&mut self, new_lr: f32) -> () {
         let mut self_ref = self.0.borrow_mut();
