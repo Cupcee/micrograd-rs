@@ -22,10 +22,10 @@ enum Operation {
 
 /// A differentiable scalar value.
 /// Wrapped into Parameter.
-struct Value {
+pub struct Value {
     hash: Uuid,
-    data: f64,
-    grad: f64,
+    pub data: f32,
+    pub grad: f32,
     backward: Option<Box<dyn FnMut() -> ()>>,
     previous: HashSet<Parameter>,
     op: Operation,
@@ -47,10 +47,11 @@ fn build_topo(param: Parameter, topo: &mut Vec<Parameter>, visited: &mut HashSet
 
 /// Parameter is Value with reference counting and mutable borrows.
 /// These are needed because an autograd system is modeled as a graph.
-pub struct Parameter(Rc<RefCell<Value>>);
+#[derive(Clone, Debug)]
+pub struct Parameter(pub Rc<RefCell<Value>>);
 
 impl Value {
-    pub fn from_scalar(data: f64) -> Parameter {
+    fn from_scalar(data: f32) -> Parameter {
         Parameter(Rc::new(RefCell::new(Value {
             hash: Uuid::new_v4(),
             data,
@@ -60,7 +61,7 @@ impl Value {
             op: Operation::Init,
         })))
     }
-    fn new(data: f64, previous: HashSet<Parameter>, op: Operation) -> Value {
+    fn new(data: f32, previous: HashSet<Parameter>, op: Operation) -> Value {
         Value {
             hash: Uuid::new_v4(),
             data,
@@ -74,6 +75,9 @@ impl Value {
 
 impl Parameter {
     /// Passes Parameter through a ReLU.
+    pub fn from_scalar(scalar: f32) -> Parameter {
+        Value::from_scalar(scalar)
+    }
     pub fn relu(self) -> Parameter {
         let data = self.0.borrow().data;
         let out = Value::new(
@@ -104,7 +108,6 @@ impl Parameter {
     }
     /// Performs a backward pass on the Parameter if it's defined.
     fn _backward(&self) -> () {
-        println!("{}", self.0.borrow());
         let try_backward = self.0.borrow_mut().backward.take();
         match try_backward {
             Some(mut back) => back(),
@@ -116,18 +119,11 @@ impl Parameter {
         let mut topo_nodes: Vec<Parameter> = vec![];
         let mut visited_nodes: HashSet<Uuid> = HashSet::new();
         build_topo(self.clone(), &mut topo_nodes, &mut visited_nodes);
-        println!("Topo");
-        topo_nodes
-            .iter()
-            .for_each(|node| println!("{}", node.0.borrow()));
-        println!("\n");
         self.0.borrow_mut().grad = 1.0;
-        println!("_backward");
         topo_nodes.iter().rev().for_each(|value| value._backward());
-        println!("\n");
     }
     /// Raises Parameter to power of `power`.
-    pub fn pow(self, power: f64) -> Parameter {
+    pub fn pow(self, power: f32) -> Parameter {
         let data = self.0.borrow().data;
         let out = Value::new(
             data.powf(power),
@@ -142,6 +138,16 @@ impl Parameter {
             self_ref.grad += (power * self_ref.data.powf(power - 1.0)) * out_ref.borrow().grad;
         }));
         Parameter(out)
+    }
+    pub fn data(&self) -> f32 {
+        self.0.borrow().data
+    }
+    pub fn grad(&self) -> f32 {
+        self.0.borrow().grad
+    }
+    pub fn lr_step(&mut self, new_lr: f32) -> () {
+        let mut self_ref = self.0.borrow_mut();
+        self_ref.data -= new_lr * self_ref.grad;
     }
 }
 
@@ -284,6 +290,15 @@ impl fmt::Display for Value {
             self.grad,
             self.op
         )
+    }
+}
+impl fmt::Debug for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Value")
+            .field("hash", &self.hash)
+            .field("data", &self.data)
+            .field("grad", &self.grad)
+            .finish()
     }
 }
 
