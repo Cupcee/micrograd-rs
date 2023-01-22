@@ -1,10 +1,6 @@
 use core::fmt;
 use rand::Rng;
-use std::{
-    iter::zip,
-    ops::{Range, RangeInclusive},
-    time::Instant,
-};
+use std::{iter::zip, ops::RangeInclusive};
 
 use crate::autograd::Parameter;
 

@@ -4,7 +4,7 @@ use micrograd_rs::{
     nn::{loss, MLP},
 };
 use plotters::prelude::*;
-use std::{iter::zip, time::Instant};
+use std::{iter::zip, sync::Arc, thread, time::Instant};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let root = BitMapBackend::new("plots/test.png", (640, 480)).into_drawing_area();
@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Ok(())
 
-    let model = MLP::new(vec![2, 16, 16, 1]);
+    let model = Arc::new(MLP::new(vec![2, 16, 16, 1]));
 
     println!("{}", model);
     println!("Number of parameters: {}", model.parameters().len());
@@ -50,38 +50,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut x1: Vec<f32> = x.clone().into_iter().map(|(x1, _)| x1).collect();
     let mut x2: Vec<f32> = x.clone().into_iter().map(|(_, x2)| x2).collect();
     for epoch in 0..100 {
-        // forward pass
+        // forward passes
         shuffle(&mut [&mut x1, &mut x2, &mut y]);
         let start = Instant::now();
-        let preds: Vec<Parameter> = zip(&x1, &x2)
-            .flat_map(|(x1, x2)| {
-                model.forward(vec![
-                    Parameter::from_scalar(*x1),
-                    Parameter::from_scalar(*x2),
-                ])
-            })
+        let mut handles = Vec::<thread::JoinHandle<Vec<Parameter>>>::new();
+        zip(&x1, &x2).for_each(|(x1, x2)| {
+            let model_ref = Arc::clone(&model);
+            let (x1, x2) = (*x1, *x2);
+            // process each point in a separate thread
+            let jh = thread::spawn(move || {
+                model_ref.forward(vec![Parameter::from_scalar(x1), Parameter::from_scalar(x2)])
+            });
+            handles.push(jh);
+        });
+        let preds: Vec<Parameter> = handles
+            .into_iter()
+            .flat_map(|jh| jh.join().unwrap())
             .collect();
-
-        println!("after forward {}", start.elapsed().as_millis());
 
         // compute loss
         let (total_loss, acc) = loss(&model, preds.clone(), &y);
 
-        println!("after loss {}", start.elapsed().as_millis());
         // backward pass
         model.zero_grad();
-        println!("after zero_grad {}", start.elapsed().as_millis());
         total_loss.backward();
 
-        println!("after backward {}", start.elapsed().as_millis());
         // update learning rate
         let lr = 1.0 - 0.9 * (epoch as f32) / 100.0;
         model.lr_step(lr);
 
-        dbg!("after lr_step {}", start.elapsed().as_millis());
         if epoch % 1 == 0 {
             println!(
-                "Epoch: {}, time: {}, loss: {}, accuracy: {}%",
+                "Epoch: {}, time: {}ms, loss: {:.6}, accuracy: {:.4}%",
                 epoch,
                 start.elapsed().as_millis(),
                 total_loss.data(),
