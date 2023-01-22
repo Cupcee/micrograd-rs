@@ -55,28 +55,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let start = Instant::now();
         let preds: Vec<Parameter> = zip(&x1, &x2)
             .flat_map(|(x1, x2)| {
-                let input = vec![Parameter::from_scalar(*x1), Parameter::from_scalar(*x2)];
-                model.forward(input)
+                model.forward(vec![
+                    Parameter::from_scalar(*x1),
+                    Parameter::from_scalar(*x2),
+                ])
             })
             .collect();
+
+        println!("after forward {}", start.elapsed().as_millis());
 
         // compute loss
         let (total_loss, acc) = loss(&model, preds.clone(), &y);
 
+        println!("after loss {}", start.elapsed().as_millis());
         // backward pass
         model.zero_grad();
+        println!("after zero_grad {}", start.elapsed().as_millis());
         total_loss.backward();
 
+        println!("after backward {}", start.elapsed().as_millis());
         // update learning rate
         let lr = 1.0 - 0.9 * (epoch as f32) / 100.0;
         model.lr_step(lr);
-        let duration = start.elapsed();
 
+        dbg!("after lr_step {}", start.elapsed().as_millis());
         if epoch % 1 == 0 {
             println!(
                 "Epoch: {}, time: {}, loss: {}, accuracy: {}%",
                 epoch,
-                duration.as_millis(),
+                start.elapsed().as_millis(),
                 total_loss.data(),
                 acc * 100.0
             );

@@ -3,6 +3,7 @@ use rand::Rng;
 use std::{
     iter::zip,
     ops::{Range, RangeInclusive},
+    time::Instant,
 };
 
 use crate::autograd::Parameter;
@@ -33,15 +34,15 @@ impl Neuron {
         }
     }
     fn parameters(&self) -> Vec<Parameter> {
-        let mut params = self.weights.to_vec();
+        let mut params = self.weights.clone();
         params.push(self.bias.clone());
         params
     }
     // Shape
     // weights: (2,) x: (2,)
     pub fn forward(&self, x: Vec<Parameter>) -> Parameter {
-        let iter = zip(self.weights.clone(), x.clone());
-        let act = iter.fold(self.bias.clone(), |sum, (wi, xi)| sum + (wi * xi));
+        let act =
+            zip(self.weights.clone(), x).fold(self.bias.clone(), |sum, (wi, xi)| sum + (wi * xi));
         if self.nonlinear {
             act.relu()
         } else {
